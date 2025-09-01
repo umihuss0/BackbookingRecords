@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Logs
 logs
 *.log
@@ -22,3 +23,30 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+=======
+# OS
+.DS_Store
+
+# Node
+node_modules/
+dist/
+build/
+.parcel-cache/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.pytest_cache/
+
+# Editors/IDE
+.vscode/
+.idea/
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/state.json
+
+>>>>>>> fc33c5c (Add Streamlit app and PMP/OE formatted reports)
