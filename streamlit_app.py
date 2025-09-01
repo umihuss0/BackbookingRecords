@@ -22,7 +22,7 @@ from processing import (
 )
 
 
-st.set_page_config(page_title="Backbooking Records Analyzer", layout="wide")
+st.set_page_config(page_title="Backbooking Records Analyzer", layout="wide", page_icon="📊")
 
 APP_VERSION = "v0.2.2"
 
