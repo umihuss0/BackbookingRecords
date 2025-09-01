@@ -39,3 +39,11 @@ venv/
 # Streamlit
 .streamlit/secrets.toml
 .streamlit/state.json
+
+# Local virtualenvs accidentally created
+venv/
+a/
+create/
+project/
+# directory literally named '#'
+#/

@@ -15,13 +15,16 @@ from processing import (
     total_by_channel,
     pairs_advertiser_by_channel,
     advertiser_by_week_pairs,
+    advertiser_by_month_week4_pairs,
     build_two_section_report,
+    format_usd,
+    format_section_block,
 )
 
 
 st.set_page_config(page_title="Backbooking Records Analyzer", layout="wide")
 
-APP_VERSION = "v0.2.1"
+APP_VERSION = "v0.2.2"
 
 def _git_sha_short() -> str:
     try:
@@ -115,17 +118,25 @@ def main() -> None:
     sections = compute_sections(df_f, top_n=top_n)
 
     tab_labels = list(sections.keys())
-    tabs = st.tabs(tab_labels + [
+    formatted_labels = [
         "Formatted: Totals (PMP/OE)",
         "Formatted: Advertiser (PMP/OE)",
         "Formatted: Advertiser by Week",
-    ])
-    for tab, label in zip(tabs, tab_labels):
-        with tab:
+    ]
+    tabs = st.tabs(formatted_labels + tab_labels)
+
+    # Render non-formatted tables after formatted tabs
+    for i, label in enumerate(tab_labels):
+        with tabs[i + 3]:
             gdf = sections[label]
             st.caption(f"Rows: {len(gdf)}")
+
+            disp = gdf.copy()
+            if "Revenue" in disp.columns:
+                disp["Revenue"] = disp["Revenue"].apply(format_usd)
+
             st.dataframe(
-                gdf,
+                disp,
                 use_container_width=True,
                 hide_index=True,
             )
@@ -140,7 +151,7 @@ def main() -> None:
 
     # Add formatted views
     # Totals view
-    with tabs[-3]:
+    with tabs[0]:
         st.subheader("PMP / OE Breakout Total")
         amount_col = st.number_input("Amount column stop (38–44)", min_value=30, max_value=60, value=40)
         page_width = st.number_input("Page width (<= 80)", min_value=42, max_value=80, value=80)
@@ -159,16 +170,31 @@ def main() -> None:
         st.code(report)
 
     # Advertiser breakout
-    with tabs[-2]:
+    with tabs[1]:
         st.subheader("PMP / OE Breakout by Advertiser")
         amount_col2 = st.number_input("Amount column stop (38–44) ", min_value=30, max_value=60, value=40, key="amt2")
         page_width2 = st.number_input("Page width (<= 80)  ", min_value=42, max_value=80, value=80, key="pw2")
-        top_n_adv = st.number_input("Top advertisers per section", min_value=5, max_value=1000, value=50, step=5)
+        top_n_adv = st.number_input("Top advertisers per section", min_value=5, max_value=1000, value=10, step=5)
 
-        pairs_oe = pairs_advertiser_by_channel(df_f, "OE")[: top_n_adv]
-        pairs_pmp = pairs_advertiser_by_channel(df_f, "PMP")[: top_n_adv]
-        total_pmp = sum(v for _, v in pairs_pmp)
-        total_oe = sum(v for _, v in pairs_oe)
+        pairs_oe_all = pairs_advertiser_by_channel(df_f, "OE")
+        pairs_pmp_all = pairs_advertiser_by_channel(df_f, "PMP")
+        pairs_oe = pairs_oe_all[: top_n_adv]
+        pairs_pmp = pairs_pmp_all[: top_n_adv]
+        total_pmp = sum(v for _, v in pairs_pmp_all)
+        total_oe = sum(v for _, v in pairs_oe_all)
+        cnt_oe = len(pairs_oe_all)
+        cnt_pmp = len(pairs_pmp_all)
+
+        header_oe = (
+            f"OE ({format_usd(total_oe)} Overall Total) - all {cnt_oe} accounts below"
+            if cnt_oe <= top_n_adv
+            else f"OE ({format_usd(total_oe)} Overall Total) - Top {top_n_adv} accounts below of {cnt_oe}"
+        )
+        header_pmp = (
+            f"PMP ({format_usd(total_pmp)} Overall Total) - all {cnt_pmp} accounts below"
+            if cnt_pmp <= top_n_adv
+            else f"PMP ({format_usd(total_pmp)} Overall Total) - Top {top_n_adv} accounts below of {cnt_pmp}"
+        )
 
         report = build_two_section_report(
             "OE", pairs_oe, total_oe,
@@ -177,35 +203,83 @@ def main() -> None:
             page_width=page_width2,
             section_rule=False,
             separator_rule=True,
+            header_left=header_oe,
+            header_right=header_pmp,
         )
         st.code(report)
 
     # Advertiser by week
-    with tabs[-1]:
+    with tabs[2]:
         st.subheader("PMP / OE Breakout by Advertiser by Week")
         amount_col3 = st.number_input("Amount column stop (38–44)", min_value=30, max_value=60, value=40, key="amt3")
         page_width3 = st.number_input("Page width (<= 80)", min_value=42, max_value=80, value=80, key="pw3")
-        top_n_w = st.number_input("Top advertisers per week", min_value=5, max_value=1000, value=25, step=5)
+        top_n_w = st.number_input("Top advertisers per week", min_value=5, max_value=1000, value=10, step=5)
 
-        wk_pairs_oe = advertiser_by_week_pairs(df_f, "OE")
-        wk_pairs_pmp = advertiser_by_week_pairs(df_f, "PMP")
-        all_weeks = sorted(set(wk_pairs_oe.keys()) | set(wk_pairs_pmp.keys()), key=lambda x: int(x.split()[-1]))
+        months_oe, data_oe = advertiser_by_month_week4_pairs(df_f, "OE")
+        months_pmp, data_pmp = advertiser_by_month_week4_pairs(df_f, "PMP")
+        month_keys = sorted(set(months_oe.keys()) | set(months_pmp.keys()))
 
-        for wk in all_weeks:
-            st.caption(wk)
-            pairs_oe = (wk_pairs_oe.get(wk) or [])[: top_n_w]
-            pairs_pmp = (wk_pairs_pmp.get(wk) or [])[: top_n_w]
-            total_oe = sum(v for _, v in pairs_oe)
-            total_pmp = sum(v for _, v in pairs_pmp)
-            report = build_two_section_report(
-                "OE", pairs_oe, total_oe,
-                "PMP", pairs_pmp, total_pmp,
-                amount_col=amount_col3,
-                page_width=page_width3,
-                section_rule=False,
-                separator_rule=True,
-            )
-            st.code(report)
+        oe_blocks: List[str] = []
+        for mkey in month_keys:
+            mlabel = months_oe.get(mkey) or months_pmp.get(mkey) or mkey
+            week_map = data_oe.get(mkey, {})
+            for w in ["W1", "W2", "W3", "W4"]:
+                if w not in week_map:
+                    continue
+                pairs_all = week_map[w]
+                pairs = pairs_all[: top_n_w]
+                total = sum(v for _, v in pairs_all)
+                cnt = len(pairs_all)
+                label = (
+                    f"{mlabel} {w} OE ({format_usd(total)}) all {cnt} accounts"
+                    if len(month_keys) > 1 and cnt <= top_n_w
+                    else f"{mlabel} {w} OE ({format_usd(total)}) top {top_n_w} accounts of {cnt}"
+                    if len(month_keys) > 1 and cnt > top_n_w
+                    else f"{w} OE ({format_usd(total)}) all {cnt} accounts"
+                    if cnt <= top_n_w
+                    else f"{w} OE ({format_usd(total)}) top {top_n_w} accounts of {cnt}"
+                )
+                block = format_section_block(
+                    "OE", pairs, total,
+                    amount_col=amount_col3,
+                    page_width=page_width3,
+                    include_rule=False,
+                    header_override=label,
+                )
+                oe_blocks.append(block)
+
+        pmp_blocks: List[str] = []
+        for mkey in month_keys:
+            mlabel = months_pmp.get(mkey) or months_oe.get(mkey) or mkey
+            week_map = data_pmp.get(mkey, {})
+            for w in ["W1", "W2", "W3", "W4"]:
+                if w not in week_map:
+                    continue
+                pairs_all = week_map[w]
+                pairs = pairs_all[: top_n_w]
+                total = sum(v for _, v in pairs_all)
+                cnt = len(pairs_all)
+                label = (
+                    f"{mlabel} {w} PMP ({format_usd(total)}) all {cnt} accounts"
+                    if len(month_keys) > 1 and cnt <= top_n_w
+                    else f"{mlabel} {w} PMP ({format_usd(total)}) top {top_n_w} accounts of {cnt}"
+                    if len(month_keys) > 1 and cnt > top_n_w
+                    else f"{w} PMP ({format_usd(total)}) all {cnt} accounts"
+                    if cnt <= top_n_w
+                    else f"{w} PMP ({format_usd(total)}) top {top_n_w} accounts of {cnt}"
+                )
+                block = format_section_block(
+                    "PMP", pairs, total,
+                    amount_col=amount_col3,
+                    page_width=page_width3,
+                    include_rule=False,
+                    header_override=label,
+                )
+                pmp_blocks.append(block)
+
+        rule_line = "=" * min(page_width3, max(42, amount_col3 + 20))
+        combined = "\n\n".join(oe_blocks + [rule_line] + pmp_blocks)
+        st.code(combined)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import re
 from typing import Dict, Iterable, List, Mapping, Tuple
+import math
 
 import pandas as pd
 
@@ -147,13 +148,24 @@ def compute_sections(df: pd.DataFrame, top_n: int = 25) -> Dict[str, pd.DataFram
     out["Revenue by Date"] = _group_sum(daily, ["Date"]).head(top_n)
 
     # Single-dimension summaries
-    for label, cols in [
-        ("By RTB Channel", ["RTB Channel"]),
-        ("By RTB Advertiser", ["RTB Advertiser"]),
-        ("By RTB SSP", ["RTB SSP"]),
-        ("By System", ["System"]),
-    ]:
-        out[label] = _group_sum(df, cols).head(top_n)
+    # By RTB Channel
+    out["By RTB Channel"] = _group_sum(df, ["RTB Channel"]).head(top_n)
+
+    # By RTB Advertiser with accompanying top RTB SSP
+    adv_totals = _group_sum(df, ["RTB Advertiser"]).head(10_000)
+    ssp_g = (
+        df.groupby(["RTB Advertiser", "RTB SSP"], dropna=False)["Revenue"].sum()
+        .reset_index()
+        .sort_values(["RTB Advertiser", "Revenue"], ascending=[True, False])
+    )
+    top_ssp = ssp_g.drop_duplicates(subset=["RTB Advertiser"], keep="first")[["RTB Advertiser", "RTB SSP"]]
+    adv_merged = adv_totals.merge(top_ssp, on="RTB Advertiser", how="left")
+    adv_merged = adv_merged[[c for c in ["RTB Advertiser", "RTB SSP", "Revenue"] if c in adv_merged.columns]]
+    out["By RTB Advertiser"] = adv_merged.head(top_n)
+
+    # Other single dimensions
+    out["By RTB SSP"] = _group_sum(df, ["RTB SSP"]).head(top_n)
+    out["By System"] = _group_sum(df, ["System"]).head(top_n)
 
     # Context-rich summaries
     out["By Deal ID"] = _group_sum(df, ["RTB Deal ID", "RTB Advertiser"]).head(top_n)
@@ -222,13 +234,17 @@ def ensure_channel_bucket(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def format_usd(amount: float) -> str:
-    # Show cents only if non-zero
-    cents = int(round((abs(amount) - int(abs(amount))) * 100))
-    if cents:
-        s = f"${amount:,.2f}"
+    """US currency with rule: show cents only if abs(value) < 1."""
+    a = float(amount)
+    sign = "-" if a < 0 else ""
+    a_abs = abs(a)
+    if a_abs == 0:
+        core = "0"
+    elif a_abs < 1:
+        core = f"{a_abs:,.2f}"
     else:
-        s = f"${int(round(amount)):,.0f}"
-    return s
+        core = f"{int(round(a_abs)):,.0f}"
+    return f"{sign}${core}"
 
 
 def _truncate_left(left: str, max_chars: int) -> str:
@@ -248,12 +264,18 @@ def format_section_block(
     page_width: int = 80,
     max_left_chars: int | None = None,
     include_rule: bool = False,
+    header_override: str | None = None,
 ) -> str:
     """Return a text block for one section with a header and aligned rows.
 
     pairs must be sorted in display order (descending by amount).
     """
-    header = f"{section} ({format_usd(section_total)}) All Accounts (Overall Total)"
+    header = (
+        header_override
+        if header_override is not None
+        else f"{section} ({format_usd(section_total)}) All Accounts (Overall Total)"
+    )
+    header = _bold_alnum(header)
     width = min(max(42, amount_col + 20), page_width)
     rule = "=" * width
     lines: List[str] = [header]
@@ -293,6 +315,8 @@ def build_two_section_report(
     page_width: int = 80,
     section_rule: bool = False,
     separator_rule: bool = True,
+    header_left: str | None = None,
+    header_right: str | None = None,
 ) -> str:
     block_left = format_section_block(
         left_name,
@@ -301,6 +325,7 @@ def build_two_section_report(
         amount_col=amount_col,
         page_width=page_width,
         include_rule=section_rule,
+        header_override=header_left,
     )
     block_right = format_section_block(
         right_name,
@@ -309,6 +334,7 @@ def build_two_section_report(
         amount_col=amount_col,
         page_width=page_width,
         include_rule=section_rule,
+        header_override=header_right,
     )
     if separator_rule:
         rule = "=" * min(page_width, max(42, amount_col + 20))
@@ -367,3 +393,59 @@ def advertiser_by_week_pairs(df: pd.DataFrame, channel: str) -> Dict[str, List[t
         out[wk] = [(row["RTB Advertiser"], float(row["Revenue"])) for _, row in sub.iterrows()]
     return out
 
+
+# ---- Four-week-per-month utilities ----
+
+
+def add_four_week_in_month(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        df["_MonthKey"], df["_MonthLabel"], df["_W4"] = [], [], []
+        return df
+    out = df.copy()
+    dt = pd.to_datetime(out["Date - EST"], errors="coerce")
+    out["_MonthKey"] = dt.dt.strftime("%Y-%m")
+    out["_MonthLabel"] = dt.dt.strftime("%b %Y")
+    day = dt.dt.day.astype("float")
+    dim = dt.dt.days_in_month.astype("float")
+    bucket = (((day - 1) * 4) // dim + 1).fillna(1).clip(lower=1, upper=4).astype(int)
+    out["_W4"] = "W" + bucket.astype(str)
+    return out
+
+
+def advertiser_by_month_week4_pairs(
+    df: pd.DataFrame, channel: str
+) -> Tuple[Dict[str, str], Dict[str, Dict[str, List[tuple[str, float]]]]]:
+    if df.empty:
+        return {}, {}
+    dfb = ensure_channel_bucket(df)
+    dfw = add_four_week_in_month(dfb)
+    mask = dfw["_ChannelBucket"] == channel
+    g = (
+        dfw.loc[mask]
+        .groupby(["_MonthKey", "_MonthLabel", "_W4", "RTB Advertiser"], dropna=False)["Revenue"]
+        .sum()
+        .reset_index()
+        .sort_values(["_MonthKey", "_W4", "Revenue"], ascending=[True, True, False])
+    )
+    months: Dict[str, str] = {}
+    data: Dict[str, Dict[str, List[tuple[str, float]]]] = {}
+    for (mkey, mlabel, w4), sub in g.groupby(["_MonthKey", "_MonthLabel", "_W4"], sort=True):
+        months[mkey] = mlabel
+        pairs = [(row["RTB Advertiser"], float(row["Revenue"])) for _, row in sub.iterrows()]
+        data.setdefault(mkey, {})[w4] = pairs
+    return months, data
+
+
+def _bold_alnum(s: str) -> str:
+    out_chars: List[str] = []
+    for ch in s:
+        o = ord(ch)
+        if 0x41 <= o <= 0x5A:  # A-Z
+            out_chars.append(chr(0x1D400 + (o - 0x41)))
+        elif 0x61 <= o <= 0x7A:  # a-z
+            out_chars.append(chr(0x1D41A + (o - 0x61)))
+        elif 0x30 <= o <= 0x39:  # 0-9
+            out_chars.append(chr(0x1D7CE + (o - 0x30)))
+        else:
+            out_chars.append(ch)
+    return "".join(out_chars)
