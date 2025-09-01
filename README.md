@@ -1,73 +1,67 @@
-# Welcome to your Lovable project
+# Backbooking Records Analyzer
 
-## Project info
+Version: v0.2.0
 
-**URL**: https://lovable.dev/projects/2507d7c3-1e6b-4014-b103-1e7d2cd1f62d
+Analyze RTB revenue data and generate copy-ready, monospaced reports for PMP/OE totals, advertisers, and weekly rollups. Built with Streamlit for fast, zero‑ops deployment.
 
-## How can I edit this code?
+## Features
 
-There are several ways of editing your application.
+- File upload: CSV/XLS/XLSX with expected columns:
+  - Date - EST, RTB Channel, RTB Advertiser, RTB SSP, System, RTB Deal ID, RTB Creative ID, Revenue
+- Data cleaning:
+  - Fuzzy column matching (minor header variations map correctly)
+  - Date parsing; revenue normalized from currency strings
+- Formatted tabs (primary views; leftmost):
+  - Formatted: Totals (PMP/OE)
+  - Formatted: Advertiser (PMP/OE) — shows top N advertisers per section; header includes total account counts
+  - Formatted: Advertiser by Week — 4‑week buckets per month (W1–W4); blocks by OE then PMP
+- Non-formatted analytics:
+  - Revenue by Date
+  - By RTB Channel
+  - By RTB Advertiser (includes top RTB SSP per advertiser)
+  - By RTB SSP
+  - By System
+- Currency formatting:
+  - ≥ $1 shows no cents (rounded); < $1 shows cents (e.g., $0.26)
+- Copy-friendly formatting rules:
+  - Monospaced, ASCII rows; right-aligned amounts at a fixed column (default 40)
+  - Width ≤ 80 chars; long advertiser names truncated with ellipsis
+  - Unicode mathematical bold used only in header lines (A–Z, a–z, 0–9)
 
-**Use Lovable**
+## Run Locally
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/2507d7c3-1e6b-4014-b103-1e7d2cd1f62d) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+streamlit run streamlit_app.py
 ```
 
-**Edit a file directly in GitHub**
+## Deploy on Streamlit Cloud
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- Repo: this repository
+- Branch: main
+- Main file path: `streamlit_app.py`
+- Python: pinned via `runtime.txt` → `python-3.11`
+- Deps: `requirements.txt` (streamlit, pandas, openpyxl)
 
-**Use GitHub Codespaces**
+## Usage Notes
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- Upload a CSV/XLSX with the required columns (order not required).
+- Use the left sidebar to set date range and “Top N” rows.
+- Copy from the “Formatted” tabs for paste‑ready text blocks. These enforce:
+  - Right-aligned currency with spaces
+  - Page width ≤ 80
+  - Unicode bold headers only; table rows are plain ASCII
 
-## What technologies are used for this project?
+## Changelog
 
-This project is built with:
+v0.2.0
+- Added Streamlit app (`streamlit_app.py`) and processing engine (`processing.py`).
+- Formatted tabs for Totals, Advertiser, and Weekly views with copy‑ready output.
+- Weekly view uses 4‑week buckets per month (W1–W4).
+- Currency display rule: cents only for values < $1.
+- “By RTB Advertiser” table now includes top RTB SSP column.
+- Tabs reordered to prioritize formatted views.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/2507d7c3-1e6b-4014-b103-1e7d2cd1f62d) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+v0.1.0
+- Initial frontend scaffolding (Vite + React + shadcn + Tailwind).
