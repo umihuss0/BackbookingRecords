@@ -1,4 +1,5 @@
 import io
+import subprocess
 from datetime import date
 from typing import Dict, List, Tuple
 
@@ -20,6 +21,18 @@ from processing import (
 
 st.set_page_config(page_title="Backbooking Records Analyzer", layout="wide")
 
+APP_VERSION = "v0.2.1"
+
+def _git_sha_short() -> str:
+    try:
+        return (
+            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL)
+            .decode()
+            .strip()
+        )
+    except Exception:
+        return ""
+
 
 def _show_copy_block(label: str, text: str) -> None:
     """Render a copy-friendly text area plus download button for quick reuse."""
@@ -36,7 +49,12 @@ def _show_copy_block(label: str, text: str) -> None:
 
 def main() -> None:
     st.title("Backbooking Records Analyzer")
-    st.caption("Upload your CSV/Excel with the expected columns to get instant summaries.")
+    sha = _git_sha_short()
+    version_line = f"{APP_VERSION}" + (f" • {sha}" if sha else "")
+    st.caption(
+        "Upload your CSV/Excel with the expected columns to get instant summaries. "
+        + version_line
+    )
 
     with st.sidebar:
         st.header("Upload & Filters")
