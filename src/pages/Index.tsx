@@ -5,10 +5,9 @@ const Index = () => {
     <div className="min-h-screen bg-white">
       <div className="content-container">
         <header className="text-center mb-10">
-          <h1 className="mb-4">File Analyzer Pro</h1>
+          <h1 className="mb-4">Backbooking Analyzer</h1>
           <p className="text-lg text-gray-700 max-w-2xl mx-auto">
-            Professional file analysis tool with drag-and-drop interface. Upload any file to get detailed 
-            metadata, checksums, and encoding information instantly.
+            Instructions: Drag and drop backbooking Missing Backbooking Records by Day file
           </p>
         </header>
         
