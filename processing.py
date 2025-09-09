@@ -165,6 +165,15 @@ def compute_sections(df: pd.DataFrame, top_n: int = 25) -> Dict[str, pd.DataFram
 
     # Other single dimensions
     out["By RTB SSP"] = _group_sum(df, ["RTB SSP"]).head(top_n)
+
+    # RTB SSP broken out by PMP/OE channel bucket
+    dfb = ensure_channel_bucket(df)
+    dfb2 = dfb[dfb["_ChannelBucket"].isin(["OE", "PMP"])]
+    ssp_channel = _group_sum(dfb2, ["RTB SSP", "_ChannelBucket"]).head(top_n)
+    # Make the bucket column user-friendly for display
+    if "_ChannelBucket" in ssp_channel.columns:
+        ssp_channel = ssp_channel.rename(columns={"_ChannelBucket": "Channel"})
+    out["By RTB SSP & Channel"] = ssp_channel
     out["By System"] = _group_sum(df, ["System"]).head(top_n)
 
     # Context-rich summaries
